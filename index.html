@@ -8681,7 +8681,7 @@
     // --- Export / Import / Offline & Google Drive Sync ---
     const GDRIVE_FOLDER_NAME = 'Pocket Vault Backup';
     const GDRIVE_BACKUP_FILENAME = 'pocket-vault-encrypted-backup.json';
-    const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+    const GDRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
     let gdriveAccessToken = null;
     let gdriveTokenExpiry = 0;
     let gdriveTokenClient = null;
@@ -9016,38 +9016,72 @@
       refreshSyncStatusUi();
     }
 
-    async function findOrCreateGDriveFolder(token) {
-      const q = encodeURIComponent(
-        `name='${GDRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`
-      );
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=drive&q=${q}&fields=files(id,name)&pageSize=5`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error(`Google Drive folder lookup failed (${res.status})`);
-      const data = await res.json();
-      if (data.files && data.files.length) return data.files[0].id;
-
-      const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: GDRIVE_FOLDER_NAME,
-          mimeType: 'application/vnd.google-apps.folder',
-          parents: ['root']
-        })
-      });
-      if (!createRes.ok) throw new Error(`Could not create Drive folder (${createRes.status})`);
-      const created = await createRes.json();
-      return created.id;
+    function getGDrivePathSegments() {
+      const inputEl = document.getElementById('gdriveFolderPathInput');
+      const rawPath = ((inputEl && inputEl.value) || gdriveFolderPath || 'Apps/Pocket Apps/Backups/Pocket Vault').trim();
+      const parts = rawPath
+        .split(/[\/\\]+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+      if (parts.length && parts[0].toLowerCase() === 'my drive') {
+        parts.shift();
+      }
+      return parts.length ? parts : ['Apps', 'Pocket Apps', 'Backups', 'Pocket Vault'];
     }
 
-    async function findGDriveBackupFile(token) {
-      const folderId = await findOrCreateGDriveFolder(token);
+    function getNormalizedGDriveFolderPath() {
+      return getGDrivePathSegments().join('/');
+    }
+
+    function escapeGDriveQueryValue(val) {
+      return String(val || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+
+    async function findOrCreateGDriveFolder(token) {
+      const segments = getGDrivePathSegments();
+      let parentId = 'root';
+
+      for (const folderName of segments) {
+        const escapedName = escapeGDriveQueryValue(folderName);
+        const q = encodeURIComponent(
+          `name='${escapedName}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`
+        );
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files?spaces=drive&q=${q}&orderBy=createdTime%20asc&fields=files(id,name)&pageSize=5`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) throw new Error(`Google Drive folder lookup failed for "${folderName}" (${res.status})`);
+        const data = await res.json();
+
+        if (data.files && data.files.length) {
+          parentId = data.files[0].id;
+        } else {
+          const createRes = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: folderName,
+              mimeType: 'application/vnd.google-apps.folder',
+              parents: [parentId]
+            })
+          });
+          if (!createRes.ok) throw new Error(`Could not create Drive folder "${folderName}" (${createRes.status})`);
+          const created = await createRes.json();
+          parentId = created.id;
+        }
+      }
+
+      return parentId;
+    }
+
+    async function findGDriveBackupFile(token, folderId = null) {
+      const targetFolderId = folderId || await findOrCreateGDriveFolder(token);
+      const escapedFile = escapeGDriveQueryValue(GDRIVE_BACKUP_FILENAME);
       const q = encodeURIComponent(
-        `name='${GDRIVE_BACKUP_FILENAME}' and '${folderId}' in parents and trashed=false`
+        `name='${escapedFile}' and '${targetFolderId}' in parents and trashed=false`
       );
       const res = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=drive&q=${q}&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)&pageSize=5`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -9055,25 +9089,15 @@
       if (!res.ok) throw new Error(`Google Drive search failed (${res.status})`);
       const data = await res.json();
       if (data.files && data.files.length) return data.files[0];
-
-      // Legacy fallback: check My Drive root if an older backup was saved before the folder existed
-      const qRoot = encodeURIComponent(`name='${GDRIVE_BACKUP_FILENAME}' and 'root' in parents and trashed=false`);
-      const rootRes = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=drive&q=${qRoot}&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)&pageSize=5`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (rootRes.ok) {
-        const rootData = await rootRes.json();
-        if (rootData.files && rootData.files.length) return rootData.files[0];
-      }
       return null;
     }
 
-    async function uploadEncryptedToGDrive(token, rawJson, existingFileId = null) {
+    async function uploadEncryptedToGDrive(token, rawJson, existingFileId = null, folderId = null) {
       const boundary = 'pocket_vault_sync_' + Date.now();
       let metadata = { name: GDRIVE_BACKUP_FILENAME, mimeType: 'application/json' };
       if (!existingFileId) {
-        const folderId = await findOrCreateGDriveFolder(token);
-        metadata = { name: GDRIVE_BACKUP_FILENAME, mimeType: 'application/json', parents: [folderId] };
+        const targetFolderId = folderId || await findOrCreateGDriveFolder(token);
+        metadata = { name: GDRIVE_BACKUP_FILENAME, mimeType: 'application/json', parents: [targetFolderId] };
       }
       const body = [
         `--${boundary}`,
@@ -9121,12 +9145,13 @@
       setGDriveSyncState('syncing');
       try {
         const token = await ensureGoogleDriveToken(!silent);
-        const existing = await findGDriveBackupFile(token);
-        await uploadEncryptedToGDrive(token, raw, existing ? existing.id : null);
+        const folderId = await findOrCreateGDriveFolder(token);
+        const existing = await findGDriveBackupFile(token, folderId);
+        await uploadEncryptedToGDrive(token, raw, existing ? existing.id : null, folderId);
         lastGDriveSyncAt = Date.now();
         saveSettings();
         setGDriveSyncState('idle');
-        const targetGDriveName = gdriveFolderPath || `Apps/Pocket Apps/Backups/Pocket Vault`;
+        const targetGDriveName = getNormalizedGDriveFolderPath();
         showSyncedGreenStrip(`Synced to ${targetGDriveName}`);
         if (!silent) showToast(`Encrypted vault backed up to ${targetGDriveName}`);
       } catch (err) {
@@ -9139,10 +9164,11 @@
       setGDriveSyncState('syncing');
       try {
         const token = await ensureGoogleDriveToken(true);
-        const existing = await findGDriveBackupFile(token);
+        const folderId = await findOrCreateGDriveFolder(token);
+        const existing = await findGDriveBackupFile(token, folderId);
         if (!existing) {
           setGDriveSyncState('idle');
-          showToast(`No Pocket Vault backup found in My Drive / ${GDRIVE_FOLDER_NAME}`);
+          showToast(`No Pocket Vault backup found in ${getNormalizedGDriveFolderPath()}`);
           return;
         }
         const text = await downloadGDriveBackupFile(token, existing.id);
@@ -9171,18 +9197,19 @@
       setGDriveSyncState('syncing');
       try {
         const token = await ensureGoogleDriveToken(true);
-        const existing = await findGDriveBackupFile(token);
+        const folderId = await findOrCreateGDriveFolder(token);
+        const existing = await findGDriveBackupFile(token, folderId);
+        const targetGDriveName = getNormalizedGDriveFolderPath();
         if (!existing) {
           if (!rawLocal) {
             setGDriveSyncState('idle');
             showToast('No local or Drive vault found to sync');
             return;
           }
-          await uploadEncryptedToGDrive(token, rawLocal, null);
+          await uploadEncryptedToGDrive(token, rawLocal, null, folderId);
           lastGDriveSyncAt = Date.now();
           saveSettings();
           setGDriveSyncState('idle');
-          const targetGDriveName = gdriveFolderPath || `Apps/Pocket Apps/Backups/Pocket Vault`;
           showSyncedGreenStrip(`Synced to ${targetGDriveName}`);
           showToast(`Initial encrypted backup uploaded to ${targetGDriveName}`);
           return;
@@ -9210,17 +9237,17 @@
             setGDriveSyncState('idle');
           }
         } else if (localTs > remoteTs + 1500 || !remoteTs) {
-          await uploadEncryptedToGDrive(token, rawLocal, existing.id);
+          await uploadEncryptedToGDrive(token, rawLocal, existing.id, folderId);
           lastGDriveSyncAt = Date.now();
           saveSettings();
           setGDriveSyncState('idle');
-          const targetGDriveName = gdriveFolderPath || `Apps/Pocket Apps/Backups/Pocket Vault`;
           showSyncedGreenStrip(`Synced to ${targetGDriveName}`);
           showToast(`Local changes synced to ${targetGDriveName}`);
         } else {
           lastGDriveSyncAt = Date.now();
           saveSettings();
           setGDriveSyncState('idle');
+          showSyncedGreenStrip(`Synced to ${targetGDriveName}`);
           showToast('Local vault and Google Drive are already in sync');
         }
       } catch (err) {

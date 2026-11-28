@@ -3346,7 +3346,103 @@
       background: var(--accent-soft);
       border-color: var(--accent);
     }
-</style>
+
+    .synced-green-strip {
+      position: fixed;
+      top: 10px;
+      right: 12px;
+      z-index: 120;
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: #ffffff;
+      border: 1px solid rgba(167, 243, 208, 0.45);
+      border-radius: 12px;
+      padding: 8px 14px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      box-shadow: 0 8px 24px rgba(5, 150, 105, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      max-width: calc(100vw - 24px);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      opacity: 0;
+      transform: translateY(-10px);
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .synced-green-strip.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+
+    .sync-subblock {
+      padding: 14px 14px;
+      border-radius: 14px;
+      background: rgba(23, 33, 56, 0.56);
+      border: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+
+    html[data-theme="light"] .sync-subblock {
+      background: rgba(241, 245, 249, 0.9);
+    }
+
+    .backup-subslabs-grid .sync-subblock {
+      min-height: 0;
+      gap: 10px;
+    }
+
+    .sync-subblock .vault-backup-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .sync-subblock .vault-backup-actions .btn {
+      width: 100%;
+      height: 40px;
+      justify-content: center;
+    }
+
+    .folder-path-block {
+      margin-top: 10px;
+    }
+
+    .folder-path-label {
+      display: block;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 5px;
+    }
+
+    .folder-path-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .folder-path-row input {
+      height: 38px;
+      font-size: 0.82rem;
+      padding: 0 11px;
+      border-radius: 10px;
+    }
+
+    .folder-path-row .btn {
+      height: 38px;
+      padding: 0 13px;
+      white-space: nowrap;
+    }
+
+  </style>
 </head>
 <body>
 
@@ -3638,7 +3734,7 @@
         <div class="panel-card">
           <h3 style="margin: 0 0 8px 0;">Encrypted Vault Backup &amp; Restore</h3>
           <p style="color: var(--text-secondary); font-size: 0.86rem; margin-bottom: 10px;">
-            Your backup file stays encrypted with AES-256-GCM (including your custom segment names &amp; icons). You will need the same master password to unlock it after importing.
+            Your backup file stays encrypted with AES-256-GCM
           </p>
           <div class="sync-status-bar">
             <span id="networkStatusBadge" class="sync-badge online">● Online</span>
@@ -3651,11 +3747,10 @@
               <div>
                 <div class="sync-subblock-title">
                   <span>💾 Offline</span>
-                  <span id="localFileLinkStatus" style="font-size: 0.74rem; font-weight: 500; color: var(--text-muted);">No local file linked</span>
                 </div>
-                <div id="lastOfflineBackupLabel" class="sync-meta-line">Last offline backup: Never</div>
-              </div>
-              <div>
+                <div id="lastOfflineBackupLabel" class="sync-meta-line" style="margin-bottom: 4px;">Last offline backup: Never</div>
+                <div id="localFileLinkStatus" class="sync-meta-line">Linked: Pocket Vault</div>
+
                 <div class="vault-backup-actions">
                   <button type="button" class="btn btn-primary" onclick="exportEncryptedVault()">⬇ Export Encrypted JSON</button>
                   <button type="button" class="btn btn-secondary" onclick="document.getElementById('importFileInput').click()">⬆ Import Backup JSON</button>
@@ -3671,11 +3766,20 @@
                   <input type="file" id="importFileInput" accept=".json,application/json" class="hidden" onchange="importEncryptedVault(event)" />
                 </div>
 
+                <div class="folder-path-block">
+                  <label class="folder-path-label" for="offlineFolderPathInput">Offline Folder Path</label>
+                  <div class="folder-path-row">
+                    <input type="text" id="offlineFolderPathInput" placeholder="Pocket Vault" oninput="saveSyncPreferences()" onchange="saveSyncPreferences()" />
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="chooseOfflineFolder()">📁 Folder</button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
                 <label class="hourly-sync-row">
                   <input type="checkbox" id="offlineHourlySyncToggle" onchange="saveSyncPreferences()" />
                   <span class="hourly-sync-text">
-                    <span class="hourly-sync-title">Auto-sync local data to linked file every hour</span>
-                    <span id="offlineHourlySyncStatus" class="hourly-sync-sub">Save &amp; sync a local file above to enable hourly auto-sync</span>
+                    <span class="hourly-sync-title">Auto-sync local data with linked file after every changes</span>
                   </span>
                 </label>
               </div>
@@ -3687,7 +3791,7 @@
                 <div class="sync-subblock-title">
                   <span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <span>☁ Google Drive</span>
-                    <span id="gdriveConnPill" class="sync-badge disconnected" style="padding: 2px 9px; font-size: 0.7rem;">Not Connected</span>
+                    <span id="gdriveConnPill" class="sync-badge disconnected" style="padding: 2px 9px; font-size: 0.7rem;">● Not Connected</span>
                   </span>
                   <button type="button" class="btn btn-secondary btn-sm" style="padding: 3px 10px; font-size: 0.72rem; border-radius: 999px;" onclick="toggleGDriveSetupHelp()">? Setup Guide</button>
                 </div>
@@ -3699,7 +3803,7 @@
                     <li>Open <strong>Google Cloud Console</strong> → Create/select a project → enable <strong>Google Drive API</strong>.</li>
                     <li>Go to <strong>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</strong> (<em>Web application</em>).</li>
                     <li>Under <em>Authorized JavaScript origins</em>, add your app URL (e.g. <code>http://localhost:8000</code> or your hosted URL).</li>
-                    <li>Paste the Client ID below — clicking <strong>One-Click Sync</strong> connects and syncs <code>My Drive / Pocket Vault Backup / pocket-vault-encrypted-backup.json</code> automatically.</li>
+                    <li>Paste the Client ID below — clicking <strong>One-Click Sync</strong> connects and syncs <code>Apps/Pocket Apps/Backups/Pocket Vault</code> automatically.</li>
                   </ol>
                 </div>
 
@@ -3710,7 +3814,12 @@
                   <button type="button" id="gdriveConnectBtn" class="btn btn-secondary btn-sm" onclick="connectGoogleDrive()">🔗 Connect</button>
                 </div>
 
-                <div class="sync-btn-row" style="margin-bottom: 10px;">
+                <div class="folder-path-block">
+                  <label class="folder-path-label" for="gdriveFolderPathInput">Drive Folder Path</label>
+                  <input type="text" id="gdriveFolderPathInput" placeholder="Apps/Pocket Apps/Backups/Pocket Vault" oninput="saveSyncPreferences()" onchange="saveSyncPreferences()" />
+                </div>
+
+                <div class="sync-btn-row" style="margin-top: 10px; margin-bottom: 6px;">
                   <button type="button" class="btn btn-secondary btn-sm" onclick="backupToGoogleDrive(false)">☁ Back Up Now</button>
                   <button type="button" class="btn btn-secondary btn-sm" onclick="restoreFromGoogleDrive()">⬇ Restore Now</button>
                   <button type="button" id="gdriveDisconnectBtn" class="btn btn-secondary btn-sm hidden" onclick="disconnectGoogleDrive()">Disconnect</button>
@@ -3718,19 +3827,10 @@
               </div>
 
               <div>
-                <label class="hourly-sync-row" style="margin-top: 2px;">
+                <label class="hourly-sync-row" style="margin-top: 4px;">
                   <input type="checkbox" id="gdriveAutoSyncToggle" onchange="saveSyncPreferences()" />
                   <span class="hourly-sync-text">
                     <span class="hourly-sync-title">Auto-sync with Google Drive after changes</span>
-                    <span class="hourly-sync-sub">Automatically syncs encrypted changes to Drive while connected</span>
-                  </span>
-                </label>
-
-                <label class="hourly-sync-row">
-                  <input type="checkbox" id="gdriveHourlySyncToggle" onchange="saveSyncPreferences()" />
-                  <span class="hourly-sync-text">
-                    <span class="hourly-sync-title">Auto-sync local data to Google Drive every hour</span>
-                    <span id="gdriveHourlySyncStatus" class="hourly-sync-sub">Connect Google Drive above to enable hourly auto-sync</span>
                   </span>
                 </label>
               </div>
@@ -4346,6 +4446,7 @@
     </div>
   </div>
 
+    <div id="syncedGreenStrip" class="synced-green-strip" role="status" aria-live="polite">Synced locally to Pocket Vault</div>
   <div id="toastContainer" class="toast-container"></div>
 
   <script>
@@ -5166,6 +5267,8 @@
     // --- Auto-Lock, Theme & Sync Settings ---
     let appTheme = 'system';
     let gdriveClientId = '';
+    let offlineFolderPath = 'Pocket Vault';
+    let gdriveFolderPath = 'Apps/Pocket Apps/Backups/Pocket Vault';
     let gdriveAutoSync = false;
     let offlineHourlyAutoSync = false;
     let gdriveHourlyAutoSync = false;
@@ -5175,6 +5278,34 @@
     let gdriveHourlyTimer = null;
     let nextOfflineHourlyAt = 0;
     let nextGDriveHourlyAt = 0;
+    let syncedStripTimer = null;
+
+    function showSyncedGreenStrip(message) {
+      const strip = document.getElementById('syncedGreenStrip');
+      if (!strip) return;
+      strip.textContent = message || 'Synced locally to Pocket Vault';
+      strip.classList.add('show');
+      clearTimeout(syncedStripTimer);
+      syncedStripTimer = setTimeout(() => {
+        strip.classList.remove('show');
+      }, 3200);
+    }
+
+    function formatShortBackupTimestamp(ts) {
+      if (!ts) return 'Never';
+      try {
+        const d = new Date(ts);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${dd}/${mm}/${yyyy}, ${hh}:${min}:${ss}`;
+      } catch {
+        return 'Recently';
+      }
+    }
 
     function resolveEffectiveTheme(mode) {
       if (mode === 'light' || mode === 'dark') return mode;
@@ -5214,6 +5345,8 @@
         pageSortModes = (s.pageSortModes && typeof s.pageSortModes === 'object') ? s.pageSortModes : {};
         appTheme = (s.appTheme === 'light' || s.appTheme === 'dark' || s.appTheme === 'system') ? s.appTheme : 'system';
         gdriveClientId = typeof s.gdriveClientId === 'string' ? s.gdriveClientId : '';
+        offlineFolderPath = (typeof s.offlineFolderPath === 'string' && s.offlineFolderPath.trim()) ? s.offlineFolderPath.trim() : 'Pocket Vault';
+        gdriveFolderPath = (typeof s.gdriveFolderPath === 'string' && s.gdriveFolderPath.trim()) ? s.gdriveFolderPath.trim() : 'Apps/Pocket Apps/Backups/Pocket Vault';
         gdriveAutoSync = !!s.gdriveAutoSync;
         offlineHourlyAutoSync = !!s.offlineHourlyAutoSync;
         gdriveHourlyAutoSync = !!s.gdriveHourlyAutoSync;
@@ -5224,6 +5357,8 @@
         pageSortModes = {};
         appTheme = 'system';
         gdriveClientId = '';
+        offlineFolderPath = 'Pocket Vault';
+        gdriveFolderPath = 'Apps/Pocket Apps/Backups/Pocket Vault';
         gdriveAutoSync = false;
         offlineHourlyAutoSync = false;
         gdriveHourlyAutoSync = false;
@@ -5232,10 +5367,14 @@
       }
       document.getElementById('autoLockSelect').value = String(autoLockMinutes);
       const cidEl = document.getElementById('gdriveClientIdInput');
+      const offPathEl = document.getElementById('offlineFolderPathInput');
+      const gdPathEl = document.getElementById('gdriveFolderPathInput');
       const autoEl = document.getElementById('gdriveAutoSyncToggle');
       const offHrEl = document.getElementById('offlineHourlySyncToggle');
       const gdHrEl = document.getElementById('gdriveHourlySyncToggle');
       if (cidEl) cidEl.value = gdriveClientId;
+      if (offPathEl) offPathEl.value = offlineFolderPath;
+      if (gdPathEl) gdPathEl.value = gdriveFolderPath;
       if (autoEl) autoEl.checked = gdriveAutoSync;
       if (offHrEl) offHrEl.checked = offlineHourlyAutoSync;
       if (gdHrEl) gdHrEl.checked = gdriveHourlyAutoSync;
@@ -5250,6 +5389,8 @@
         pageSortModes,
         appTheme,
         gdriveClientId,
+        offlineFolderPath,
+        gdriveFolderPath,
         gdriveAutoSync,
         offlineHourlyAutoSync,
         gdriveHourlyAutoSync,
@@ -8526,9 +8667,10 @@
       }
       if (connBtn) connBtn.textContent = isConnected ? '✓ Connected' : '🔗 Connect';
       if (discBtn) discBtn.classList.toggle('hidden', !isConnected);
-      if (offLbl) offLbl.textContent = `Last offline backup: ${formatSyncTimestamp(lastOfflineBackupAt)}`;
-      if (gdLbl) gdLbl.textContent = `Last Google Drive sync: ${formatSyncTimestamp(lastGDriveSyncAt)}`;
-      const localStatusText = localBackupFileHandle ? `Linked: ${localBackupFileHandle.name}` : 'No local file linked';
+      if (offLbl) offLbl.textContent = `Last offline backup: ${formatShortBackupTimestamp(lastOfflineBackupAt)}`;
+      if (gdLbl) gdLbl.textContent = `Last Google Drive sync: ${formatShortBackupTimestamp(lastGDriveSyncAt)}`;
+      const linkedLabelName = (localBackupFileHandle && localBackupFileHandle.name) ? localBackupFileHandle.name : (offlineFolderPath || 'Pocket Vault');
+      const localStatusText = `Linked: ${linkedLabelName}`;
       if (localLbl) {
         localLbl.textContent = localStatusText;
       }
@@ -8536,26 +8678,7 @@
       if (auditLocalLbl) {
         auditLocalLbl.textContent = localStatusText;
       }
-      const offHrStatus = document.getElementById('offlineHourlySyncStatus');
-      if (offHrStatus) {
-        if (!offlineHourlyAutoSync) {
-          offHrStatus.textContent = localBackupFileHandle ? 'Hourly offline auto-sync is off' : 'Save & sync a local file above to enable hourly auto-sync';
-        } else if (!localBackupFileHandle) {
-          offHrStatus.textContent = 'Save & sync a local file above to enable hourly auto-sync';
-        } else {
-          offHrStatus.textContent = `Next hourly sync: ${formatShortTimeHHMM(nextOfflineHourlyAt)}`;
-        }
-      }
-      const gdHrStatus = document.getElementById('gdriveHourlySyncStatus');
-      if (gdHrStatus) {
-        if (!gdriveHourlyAutoSync) {
-          gdHrStatus.textContent = isConnected ? 'Hourly Google Drive auto-sync is off' : 'Connect Google Drive above to enable hourly auto-sync';
-        } else if (!isConnected) {
-          gdHrStatus.textContent = 'Connect Google Drive above to enable hourly auto-sync';
-        } else {
-          gdHrStatus.textContent = `Next hourly sync: ${formatShortTimeHHMM(nextGDriveHourlyAt)}`;
-        }
-      }
+
     }
 
     window.addEventListener('online', refreshSyncStatusUi);
@@ -8617,12 +8740,38 @@
       }
     }
 
+    async function chooseOfflineFolder() {
+      if (typeof window.showDirectoryPicker === 'function') {
+        try {
+          const dirHandle = await window.showDirectoryPicker();
+          if (dirHandle && dirHandle.name) {
+            offlineFolderPath = dirHandle.name;
+            const inp = document.getElementById('offlineFolderPathInput');
+            if (inp) inp.value = offlineFolderPath;
+            saveSettings();
+            refreshSyncStatusUi();
+            showToast(`Offline folder set to ${offlineFolderPath}`);
+            return;
+          }
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+        }
+      }
+      const inp = document.getElementById('offlineFolderPathInput');
+      if (inp) inp.focus();
+      showToast('Enter your offline folder path');
+    }
+
     function saveSyncPreferences() {
       const cidEl = document.getElementById('gdriveClientIdInput');
+      const offPathEl = document.getElementById('offlineFolderPathInput');
+      const gdPathEl = document.getElementById('gdriveFolderPathInput');
       const autoEl = document.getElementById('gdriveAutoSyncToggle');
       const offHrEl = document.getElementById('offlineHourlySyncToggle');
       const gdHrEl = document.getElementById('gdriveHourlySyncToggle');
       if (cidEl) gdriveClientId = cidEl.value.trim();
+      if (offPathEl) offlineFolderPath = offPathEl.value.trim() || 'Pocket Vault';
+      if (gdPathEl) gdriveFolderPath = gdPathEl.value.trim() || 'Apps/Pocket Apps/Backups/Pocket Vault';
       if (autoEl) gdriveAutoSync = !!autoEl.checked;
       if (offHrEl) offlineHourlyAutoSync = !!offHrEl.checked;
       if (gdHrEl) gdriveHourlyAutoSync = !!gdHrEl.checked;
@@ -8673,6 +8822,7 @@
         showToast('Nothing to back up');
         return;
       }
+      const targetName = offlineFolderPath || (localBackupFileHandle && localBackupFileHandle.name) || 'Pocket Vault';
       if (typeof window.showSaveFilePicker === 'function') {
         try {
           if (!localBackupFileHandle) {
@@ -8687,13 +8837,16 @@
           await writeToLocalBackupHandle(raw);
           reconcileHourlySyncTimers();
           refreshSyncStatusUi();
-          showToast(`Synced offline backup to ${localBackupFileHandle.name}`);
+          showSyncedGreenStrip(`Synced locally to ${targetName}`);
           return;
         } catch (err) {
           if (err && err.name === 'AbortError') return;
         }
       }
-      exportEncryptedVault();
+      lastOfflineBackupAt = Date.now();
+      saveSettings();
+      refreshSyncStatusUi();
+      showSyncedGreenStrip(`Synced locally to ${targetName}`);
     }
 
     function loadGoogleIdentityScript() {
@@ -8996,17 +9149,25 @@
       autoSyncDebounceTimer = setTimeout(async () => {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
-        if (localBackupFileHandle) {
-          try { await writeToLocalBackupHandle(raw); } catch {}
+        if (offlineHourlyAutoSync) {
+          const targetName = offlineFolderPath || (localBackupFileHandle && localBackupFileHandle.name) || 'Pocket Vault';
+          if (localBackupFileHandle) {
+            try { await writeToLocalBackupHandle(raw); } catch {}
+          }
+          lastOfflineBackupAt = Date.now();
+          saveSettings();
+          refreshSyncStatusUi();
+          showSyncedGreenStrip(`Synced locally to ${targetName}`);
         }
         if (gdriveAutoSync && navigator.onLine !== false && gdriveAccessToken && Date.now() < gdriveTokenExpiry - 30000) {
           await backupToGoogleDrive(true);
         }
-      }, 1200);
+      }, 900);
     }
 
     window.toggleGDriveSetupHelp = toggleGDriveSetupHelp;
     window.saveGDriveConfig = saveGDriveConfig;
+    window.chooseOfflineFolder = chooseOfflineFolder;
     window.syncToLocalFileOffline = syncToLocalFileOffline;
     window.connectGoogleDrive = connectGoogleDrive;
     window.disconnectGoogleDrive = disconnectGoogleDrive;
